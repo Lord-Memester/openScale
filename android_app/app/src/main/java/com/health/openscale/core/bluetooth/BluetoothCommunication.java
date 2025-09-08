@@ -20,6 +20,7 @@ import static android.bluetooth.BluetoothGatt.GATT_SUCCESS;
 import static android.content.Context.LOCATION_SERVICE;
 
 import android.Manifest;
+import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.le.ScanResult;
 import android.content.Context;
@@ -69,7 +70,7 @@ public abstract class BluetoothCommunication {
     private Handler disconnectHandler;
 
     private BluetoothCentralManager central;
-    private BluetoothPeripheral btPeripheral;
+    protected BluetoothPeripheral btPeripheral;
 
     public BluetoothCommunication(Context context)
     {
@@ -393,6 +394,7 @@ public abstract class BluetoothCommunication {
         }
         return macAddress;
     }
+
     // ---
 
     /**

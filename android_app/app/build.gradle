@@ -27,46 +27,10 @@ android {
         }
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        multiDexEnabled true
     }
     sourceSets {
         androidTest.assets.srcDirs += files("$projectDir/schemas".toString())
-    }
-
-    signingConfigs {
-        release {
-            def keystorePropertiesFile = rootProject.file("../../openScale.keystore")
-            def keystoreProperties = new Properties()
-            try {
-                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-            } catch (FileNotFoundException e) {
-                keystoreProperties = null;
-            }
-
-            if (keystoreProperties != null) {
-                storeFile file(rootDir.getCanonicalPath() + '/' + keystoreProperties['releaseKeyStore'])
-                keyAlias keystoreProperties['releaseKeyAlias']
-                keyPassword keystoreProperties['releaseKeyPassword']
-                storePassword keystoreProperties['releaseStorePassword']
-            }
-        }
-
-        oss {
-            def keystoreOSSPropertiesFile = rootProject.file("../../openScale_oss.keystore")
-            def keystoreOSSProperties = new Properties()
-            try {
-                keystoreOSSProperties.load(new FileInputStream(keystoreOSSPropertiesFile))
-            }
-            catch (FileNotFoundException e) {
-                keystoreOSSProperties = null;
-            }
-
-            if (keystoreOSSProperties != null) {
-                storeFile file(rootDir.getCanonicalPath() + '/' + keystoreOSSProperties['releaseKeyStore'])
-                keyAlias keystoreOSSProperties['releaseKeyAlias']
-                keyPassword keystoreOSSProperties['releaseKeyPassword']
-                storePassword keystoreOSSProperties['releaseStorePassword']
-            }
-        }
     }
 
     buildTypes {
@@ -84,7 +48,7 @@ android {
             archivesBaseName = "openScale-"+defaultConfig.versionName
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
-            signingConfig signingConfigs.release
+            // signingConfig signingConfigs.release // Removed signing configuration
         }
         oss {
             archivesBaseName = "openScale-"+defaultConfig.versionName
@@ -92,7 +56,7 @@ android {
             versionNameSuffix "-oss"
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
-            signingConfig signingConfigs.oss
+            // signingConfig signingConfigs.oss // Removed signing configuration
         }
     }
     compileOptions {

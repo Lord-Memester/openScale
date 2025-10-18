@@ -85,12 +85,7 @@ enum class DeviceCapability(
  * Defines whether a device communicates via a GATT connection
  * or only via broadcast advertisements.
  */
-enum class LinkMode {
-    CONNECT_GATT,
-    BROADCAST_ONLY,
-    CLASSIC_SPP,
-    L2CAP
-}
+enum class LinkMode {CONNECT_GATT, BROADCAST_ONLY, CLASSIC_SPP, L2CAP }
 
 /**
  * Signals how the handler consumed an advertisement.

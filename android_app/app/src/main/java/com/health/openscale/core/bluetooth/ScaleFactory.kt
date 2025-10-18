@@ -93,6 +93,7 @@ import com.health.openscale.core.bluetooth.modern.SppScaleAdapter
 import com.health.openscale.core.bluetooth.modern.StandardBeurerSanitasHandler
 import com.health.openscale.core.bluetooth.modern.TrisaBodyAnalyzeHandler
 import com.health.openscale.core.bluetooth.modern.TuningProfile
+import com.health.openscale.core.bluetooth.modern.WiiBalanceBoardHandler
 import com.health.openscale.core.bluetooth.modern.Yoda1Handler
 import com.health.openscale.core.bluetooth.modern.YunmaiHandler
 import com.health.openscale.core.bluetooth.modern.forBroadcast
@@ -161,6 +162,7 @@ class ScaleFactory @Inject constructor(
         AAAxHandler(),
         ActiveEraBF06Handler(),
         )
+                    WiiBalanceBoardHandler(applicationContext, settingsFacade, userFacade),
 
     /**
      * Attempts to create a legacy Java Bluetooth driver instance based on the device name.

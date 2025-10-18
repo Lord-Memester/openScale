@@ -18,6 +18,8 @@
 package com.health.openscale.core.service
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.content.Context
 import android.os.Handler
 import com.health.openscale.R
 import com.health.openscale.core.bluetooth.BluetoothEvent
@@ -175,6 +177,54 @@ class BleConnector(
             _connectedDeviceAddress.value = deviceInfo.address
             _connectedDeviceName.value = deviceInfo.name
             _connectionError.value = null // Clear previous errors.
+
+            // For Nintendo RVL-WBC-01 (Wii Balance Board) attempt best-effort programmatic pairing
+            // before creating the communicator so we can open L2CAP channels reliably.
+            if (deviceInfo.name != null &&
+                            deviceInfo.name.equals("Nintendo RVL-WBC-01", ignoreCase = true) &&
+                            appContext != null
+            ) {
+                try {
+                    val btAdapter = BluetoothAdapter.getDefaultAdapter()
+                    val remote =
+                            try {
+                                btAdapter?.getRemoteDevice(deviceInfo.address)
+                            } catch (_: Throwable) {
+                                null
+                            }
+                    if (remote != null) {
+                        LogManager.i(
+                                TAG,
+                                "Attempting programmatic pairing for Wii device $deviceDisplayName"
+                        )
+                        val pairingHelper = ClassicPairingHelper(appContext)
+                        val paired =
+                                try {
+                                    pairingHelper.pairDevice(remote, null, 20_000L)
+                                } catch (t: Throwable) {
+                                    LogManager.w(TAG, "Pairing helper threw: ${t.message}", t)
+                                    false
+                                }
+                        if (!paired) {
+                            LogManager.w(TAG, "Pairing failed for $deviceDisplayName")
+                            _connectionError.value = "Pairing failed for $deviceDisplayName"
+                            _connectionStatus.value = ConnectionStatus.FAILED
+                            _connectedDeviceAddress.value = null
+                            _connectedDeviceName.value = null
+                            return@launch
+                        } else {
+                            LogManager.i(TAG, "Pairing succeeded for $deviceDisplayName")
+                        }
+                    } else {
+                        LogManager.w(
+                                TAG,
+                                "Could not obtain remote BluetoothDevice for ${deviceInfo.address}"
+                        )
+                    }
+                } catch (t: Throwable) {
+                    LogManager.w(TAG, "Exception while attempting pairing: ${t.message}", t)
+                }
+            }
 
             activeCommunicator = scaleFactory.createCommunicator(deviceInfo)
 

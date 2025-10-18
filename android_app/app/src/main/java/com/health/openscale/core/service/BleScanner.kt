@@ -18,9 +18,14 @@
 package com.health.openscale.core.service
 
 import android.annotation.SuppressLint
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanResult
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Handler
 import android.os.Looper
 import android.util.SparseArray
@@ -87,6 +92,187 @@ class BluetoothScannerManager(
         BluetoothCentralManager(context, centralManagerCallback, blessedBluetoothHandler)
     }
 
+    // Bluetooth Classic support (SPP / RFCOMM) discovery helpers
+    private val bluetoothAdapter: BluetoothAdapter? by lazy {
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager?)?.adapter
+    }
+    private var classicReceiverRegistered = false
+
+    private val classicDiscoveryReceiver =
+            object : BroadcastReceiver() {
+                @SuppressLint("MissingPermission")
+                override fun onReceive(ctx: Context, intent: Intent) {
+                    when (intent.action) {
+                        BluetoothDevice.ACTION_FOUND -> {
+                            val device: BluetoothDevice? =
+                                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                            val name =
+                                    device?.name
+                                            ?: intent.getStringExtra(BluetoothDevice.EXTRA_NAME)
+                                                    ?: "Unknown"
+                            val address = device?.address ?: return
+                            val rssi =
+                                    intent.getShortExtra(
+                                                    BluetoothDevice.EXTRA_RSSI,
+                                                    Short.MIN_VALUE
+                                            )
+                                            .toInt()
+
+                            val newDevice =
+                                    ScannedDeviceInfo(
+                                            name = name,
+                                            address = address,
+                                            rssi = rssi,
+                                            serviceUuids = emptyList(),
+                                            manufacturerData = null,
+                                            isSupported = false,
+                                            determinedHandlerDisplayName = null
+                                    )
+
+                            // Determine support and handler name
+                            val (isSupported, handlerName) =
+                                    scaleFactory.getSupportingHandlerInfo(newDevice)
+                            newDevice.isSupported = isSupported
+                            newDevice.determinedHandlerDisplayName = handlerName
+
+                            // Integrate into device list (mirrors BLE handling logic)
+                            val existingDevice = deviceMap[newDevice.address]
+                            var listShouldBeUpdated = false
+
+                            if (existingDevice != null) {
+                                val nameChangedToKnown =
+                                        newDevice.name != null && existingDevice.name == null
+                                val supportStatusImproved =
+                                        !existingDevice.isSupported && newDevice.isSupported
+                                val handlerChanged =
+                                        newDevice.determinedHandlerDisplayName !=
+                                                existingDevice.determinedHandlerDisplayName
+
+                                if (newDevice.rssi != existingDevice.rssi ||
+                                                nameChangedToKnown ||
+                                                supportStatusImproved ||
+                                                handlerChanged
+                                ) {
+                                    deviceMap[newDevice.address] =
+                                            existingDevice.copy(
+                                                    name = newDevice.name ?: existingDevice.name,
+                                                    rssi = newDevice.rssi,
+                                                    isSupported =
+                                                            existingDevice.isSupported ||
+                                                                    newDevice.isSupported,
+                                                    determinedHandlerDisplayName =
+                                                            newDevice.determinedHandlerDisplayName
+                                                                    ?: existingDevice
+                                                                            .determinedHandlerDisplayName,
+                                                    serviceUuids = existingDevice.serviceUuids,
+                                                    manufacturerData =
+                                                            existingDevice.manufacturerData
+                                            )
+                                    listShouldBeUpdated = true
+                                }
+                            } else {
+                                if (newDevice.isSupported || !newDevice.name.isNullOrEmpty()) {
+                                    deviceMap[newDevice.address] = newDevice
+                                    listShouldBeUpdated = true
+                                }
+                            }
+
+                            if (listShouldBeUpdated) {
+                                _scannedDevices.value =
+                                        deviceMap
+                                                .values
+                                                .filter {
+                                                    it.isSupported ||
+                                                            (!it.name.isNullOrEmpty() &&
+                                                                    it.name !=
+                                                                            "Unbekanntes Gerät" &&
+                                                                    it.name != "Unknown Device")
+                                                }
+                                                .sortedWith(
+                                                        compareByDescending<ScannedDeviceInfo> {
+                                                            it.isSupported
+                                                        }
+                                                                .thenByDescending { it.rssi }
+                                                                .thenBy {
+                                                                    it.name?.lowercase() ?: "zzzz"
+                                                                }
+                                                )
+                                                .toList()
+                            }
+                        }
+                        BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                            LogManager.d(TAG, "Classic discovery finished")
+                        }
+                    }
+                }
+            }
+
+    @SuppressLint("MissingPermission")
+    private fun startClassicDiscovery() {
+        val adapter = bluetoothAdapter
+        if (adapter == null) {
+            LogManager.w(TAG, "BluetoothAdapter unavailable; cannot start classic discovery")
+            return
+        }
+        try {
+            if (!adapter.isEnabled) {
+                LogManager.w(TAG, "BluetoothAdapter disabled; cannot start classic discovery")
+                return
+            }
+            if (adapter.isDiscovering) {
+                LogManager.d(TAG, "Classic discovery already in progress")
+            } else {
+                val filter =
+                        IntentFilter().apply {
+                            addAction(BluetoothDevice.ACTION_FOUND)
+                            addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+                        }
+                try {
+                    context.registerReceiver(classicDiscoveryReceiver, filter)
+                    classicReceiverRegistered = true
+                } catch (t: Throwable) {
+                    LogManager.w(
+                            TAG,
+                            "Failed to register classic discovery receiver: ${t.message}",
+                            t
+                    )
+                }
+                adapter.startDiscovery()
+                LogManager.i(TAG, "Started Bluetooth Classic discovery")
+            }
+        } catch (t: Throwable) {
+            LogManager.e(TAG, "Error starting classic discovery: ${t.message}", t)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun stopClassicDiscovery() {
+        val adapter = bluetoothAdapter
+        if (adapter == null) return
+        try {
+            if (adapter.isDiscovering) {
+                adapter.cancelDiscovery()
+                LogManager.i(TAG, "Cancelled Bluetooth Classic discovery")
+            }
+        } catch (t: Throwable) {
+            LogManager.w(TAG, "Failed to cancel discovery: ${t.message}", t)
+        }
+
+        if (classicReceiverRegistered) {
+            try {
+                context.unregisterReceiver(classicDiscoveryReceiver)
+            } catch (t: Throwable) {
+                LogManager.w(
+                        TAG,
+                        "Failed to unregister classic discovery receiver: ${t.message}",
+                        t
+                )
+            } finally {
+                classicReceiverRegistered = false
+            }
+        }
+    }
+
     private val _scannedDevices = MutableStateFlow<List<ScannedDeviceInfo>>(emptyList())
     /**
      * Emits the current list of discovered and processed [ScannedDeviceInfo] objects.
@@ -138,8 +324,10 @@ class BluetoothScannerManager(
         _scanError.value = null // Clear previous errors.
         _isScanning.value = true
 
+        // Start both BLE (Blessed) and Classic discovery so UI can present both kinds of devices.
         try {
             centralManager.scanForPeripherals()
+            startClassicDiscovery()
         } catch (e: Exception) {
             LogManager.e(TAG, "Exception while starting scan: ${e.message}", e)
             _scanError.value = "Error starting scan: ${e.localizedMessage ?: "Unknown error"}"

@@ -41,6 +41,7 @@ import com.health.openscale.core.model.MeasurementWithValues
 import com.health.openscale.core.utils.LogManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -234,6 +235,7 @@ class FacadeDriverSettings(
 // - Concrete subclasses implement link-specific connect/disconnect logic.
 // -------------------------------------------------------------------------------------------------
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 abstract class ModernScaleAdapter(
     protected val context: android.content.Context,
     protected val settingsFacade: SettingsFacade,

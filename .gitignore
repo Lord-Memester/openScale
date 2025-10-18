@@ -56,3 +56,4 @@ fastlane/screenshots
 fastlane/test_output
 fastlane/readme.md
 fastlane/README.md
+android_app/app/build.gradle.kts
